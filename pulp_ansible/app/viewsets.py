@@ -39,7 +39,10 @@ from pulpcore.plugin.viewsets import (
 )
 
 from pulp_ansible.app.galaxy.mixins import UploadGalaxyCollectionMixin
-from pulp_ansible.app.utils import get_queryset_annotated_with_last_sync_task
+from pulp_ansible.app.utils import (
+    get_collection_version_deferred_fields,
+    get_queryset_annotated_with_last_sync_task,
+)
 
 from .models import (
     AnsibleCollectionDeprecated,
@@ -227,6 +230,13 @@ class CollectionVersionViewSet(UploadGalaxyCollectionMixin, SingleArtifactConten
     serializer_class = CollectionVersionSerializer
     filterset_class = CollectionVersionFilter
     ordering_fields = ("pulp_created", "name", "version", "namespace")
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        if self.request.method != "GET":
+            return qs
+        deferred = get_collection_version_deferred_fields(self.request.query_params)
+        return qs.defer(*deferred) if deferred else qs
 
     DEFAULT_ACCESS_POLICY = {
         "statements": [

@@ -80,7 +80,10 @@ from pulp_ansible.app.tasks.utils import (
     parse_collections_requirements_file,
     parse_metadata,
 )
-from pulp_ansible.app.utils import set_collection_deferred_fields
+from pulp_ansible.app.utils import (
+    COLLECTION_VERSION_LARGE_FIELDS,
+    set_collection_deferred_fields,
+)
 from pulp_ansible.exceptions import (
     AvailableVersionsNotFoundError,
     CollectionNotFound,
@@ -259,7 +262,7 @@ def sync(remote_pk, repository_pk, mirror, optimize, **kwargs):
 
     first_stage = CollectionSyncFirstStage(remote, repository, is_repo_remote, optimize)
     if first_stage.should_sync:
-        set_collection_deferred_fields(["docs_blob", "manifest", "files", "contents"])
+        set_collection_deferred_fields(COLLECTION_VERSION_LARGE_FIELDS)
         d_version = AnsibleDeclarativeVersion(first_stage, repository, mirror=mirror)
         repository_version = d_version.create()
 
@@ -1242,6 +1245,15 @@ class AnsibleContentSaver(ContentSaver):
         super().__init__(*args, **kwargs)
         self.repository_version = repository_version
 
+    @staticmethod
+    def _collection_sort_key(d_content):
+        content = d_content.content
+        if isinstance(content, CollectionVersion):
+            return (content.namespace or "", content.name or "")
+        if isinstance(content, AnsibleNamespaceMetadata):
+            return ("", content.name or "")
+        return ("", "")
+
     def _pre_save(self, batch):
         """
         Save a batch of Collection objects.
@@ -1250,9 +1262,10 @@ class AnsibleContentSaver(ContentSaver):
             batch (list of :class:`~pulpcore.plugin.stages.DeclarativeContent`): The batch of
                 :class:`~pulpcore.plugin.stages.DeclarativeContent` objects to be saved.
         """
-        # Sort the batch by natural key to prevent deadlocks
-        # Keep this here until added to Pulpcore
-        batch.sort(key=lambda x: "".join(map(str, x.content.natural_key())))
+        # Collection rows are unique on (pulp_domain, namespace, name), and each sync works
+        # in a single domain. Sorting by namespace and name makes concurrent syncs insert
+        # into that unique index in the same order.
+        batch.sort(key=self._collection_sort_key)
         for d_content in batch:
             if d_content is None:
                 continue
