@@ -38,6 +38,7 @@ from pulp_ansible.app.tasks.utils import (
     parse_collection_filename,
     parse_collections_requirements_file,
 )
+from pulp_ansible.app.utils import COLLECTION_VERSION_LARGE_FIELDS
 
 from .models import (
     AnsibleCollectionDeprecated,
@@ -686,7 +687,7 @@ class CollectionVersionSerializer(ContentChecksumSerializer, CollectionVersionUp
         query_params = request.query_params
         if self.include_arg_name in query_params or self.exclude_arg_name in query_params:
             return
-        for fieldname in ["files", "manifest", "docs_blob", "contents"]:
+        for fieldname in COLLECTION_VERSION_LARGE_FIELDS:
             # Redact these fields by default as they have no size limit.
             self.fields.pop(fieldname)
 
